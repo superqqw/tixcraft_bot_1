@@ -995,11 +995,9 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
     pass_date_is_sold_out_enable = config_dict["tixcraft"]["pass_date_is_sold_out"]
     auto_reload_coming_soon_page_enable = config_dict["tixcraft"]["auto_reload_coming_soon_page"]
 
-    # PS: for big events, check sold out text maybe not helpful, due to database is too busy.
     sold_out_text_list = ["選購一空","已售完","No tickets available","Sold out","空席なし","完売した"]
-    # PS: "Start ordering" for indievox.com.
     find_ticket_text_list = ['立即訂購','Find tickets', 'Start ordering','お申込みへ進む']
-
+    
     game_name = ""
 
     if "/activity/game/" in url:
@@ -1007,43 +1005,16 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
         if len(url_split) >= 6:
             game_name = url_split[5]
 
-    if show_debug_message:
-        print('get date game_name:', game_name)
-        print("date_auto_select_mode:", auto_select_mode)
-        print("date_keyword:", date_keyword)
-
     check_game_detail = False
     # choose date
     if "/activity/game/%s" % (game_name,) in url:
-        if show_debug_message:
-            if len(date_keyword) == 0:
-                print("date keyword is empty.")
-            else:
-                print("date keyword:", date_keyword)
         check_game_detail = True
 
     area_list = None
     if check_game_detail:
-        if show_debug_message:
-            print("start to query #gameList info.")
         my_css_selector = '#gameList > table > tbody > tr'
         try:
             area_list = driver.find_elements(By.CSS_SELECTOR, my_css_selector)
-            if not area_list is None:
-                if len(area_list)==0:
-                    # only headless mode detected now.
-                    if config_dict["advanced"]["headless"]:
-                        html_body = driver.page_source
-                        if not html_body is None:
-                            if len(html_body) > 0:
-                                html_text = util.remove_html_tags(html_body)
-                                bot_detected_string_list = ['Your Session Has Been Suspended'
-                                , 'Something about your browsing behavior or network made us think you were a bot'
-                                , 'Your browser hit a snag and we need to make sure you'
-                                ]
-                                for each_string in bot_detected_string_list:
-                                    print(html_text)
-                                    break
         except Exception as exc:
             print("find #gameList fail")
 
@@ -1052,6 +1023,7 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
     coming_soon_condictions_list_tw = ['開賣','剩餘',' 天',' 小時',' 分鐘',' 秒','0',':','/','20']
     coming_soon_condictions_list_ja = ['発売開始', ' 日', ' 時間',' 分',' 秒','0',':','/','20']
     coming_soon_condictions_list = coming_soon_condictions_list_en
+
     html_lang="en-US"
     try:
         html_body = driver.page_source
@@ -1060,8 +1032,6 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
                 if '<head' in html_body:
                     html = html_body.split("<head")[0]
                     html_lang = html.split('"')[1]
-                    if show_debug_message:
-                        print("html lang:" , html_lang)
                     if html_lang == "zh-TW":
                         coming_soon_condictions_list = coming_soon_condictions_list_tw
                     if html_lang == "ja":
@@ -1074,8 +1044,6 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
 
     if not area_list is None:
         area_list_count = len(area_list)
-        if show_debug_message:
-            print("date_list_count:", area_list_count)
 
         if area_list_count > 0:
             formated_area_list = []
@@ -1083,13 +1051,11 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
                 row_text = ""
                 row_html = ""
                 try:
-                    #row_text = row.text
                     row_html = row.get_attribute('innerHTML')
                     row_text = util.remove_html_tags(row_html)
                 except Exception as exc:
                     if show_debug_message:
                         print(exc)
-                    # error, exit loop
                     break
 
                 if len(row_text) > 0:
@@ -1097,8 +1063,6 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
                         row_text = ""
 
                 if len(row_text) > 0:
-
-                    # check is coming soon events in list.
                     is_match_all_coming_soon_condiction = True
                     for condiction_string in coming_soon_condictions_list:
                         if not condiction_string in row_text:
@@ -1106,99 +1070,58 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
                             break
 
                     if is_match_all_coming_soon_condiction:
-                        if show_debug_message:
-                            print("match coming soon condiction at row:", row_text)
                         is_coming_soon = True
 
-                    if is_coming_soon:
-                        if auto_reload_coming_soon_page_enable:
-                            break
-
-                    row_is_enabled=False
+                    # 只對即將開賣的選項進行自動刷新
+                    row_is_enabled = False
                     for text_item in find_ticket_text_list:
                         if text_item in row_text:
                             row_is_enabled = True
                             break
 
-                    # check sold out text.
                     if row_is_enabled:
                         if pass_date_is_sold_out_enable:
                             for sold_out_item in sold_out_text_list:
                                 row_text_right_part = row_text[(len(sold_out_item)+5)*-1:]
-                                if show_debug_message:
-                                    #print("check right part text:", row_text_right_part)
-                                    pass
                                 if sold_out_item in row_text_right_part:
                                     row_is_enabled = False
-                                    if show_debug_message:
-                                        print("match sold out text: %s, skip this row." % (sold_out_item))
                                     break
 
                     if row_is_enabled:
                         formated_area_list.append(row)
 
-            if show_debug_message:
-                print("formated_area_list count:", len(formated_area_list))
-
             if len(date_keyword) == 0:
                 matched_blocks = formated_area_list
             else:
-                # match keyword.
-                if show_debug_message:
-                    print("start to match formated keyword:", date_keyword)
-
                 matched_blocks = util.get_matched_blocks_by_keyword(config_dict, auto_select_mode, date_keyword, formated_area_list)
 
-                if show_debug_message:
-                    if not matched_blocks is None:
-                        print("after match keyword, found count:", len(matched_blocks))
         else:
-            print("not found date-time-position")
             pass
     else:
-        print("date date-time-position is None")
         pass
 
     target_area = util.get_target_item_from_matched_list(matched_blocks, auto_select_mode)
 
     is_date_clicked = False
     if not target_area is None:
-        if show_debug_message:
-            print("target_area got, start to press button.")
-
-        is_date_clicked = press_button(target_area, By.CSS_SELECTOR,'button')
+        is_date_clicked = press_button(target_area, By.CSS_SELECTOR, 'button')
+        
+        # 如果無法按按鈕，嘗試點擊超連結
         if not is_date_clicked:
-            if show_debug_message:
-                print("press button fail, try to click hyperlink.")
-
             if "tixcraft" in domain_name:
                 try:
                     data_href = target_area.get_attribute("data-href")
                     if not data_href is None:
-                        print("goto url:", data_href)
                         driver.get(data_href)
-                    else:
-                        if show_debug_message:
-                            print("data-href not ready")
-
-                        # delay 200ms to click.
-                        #driver.set_script_timeout(0.3)
-                        #js="""setTimeout(function(){arguments[0].click()},200);"""
-                        #driver.execute_script(js, target_area)
                 except Exception as exc:
                     pass
 
+            # Ticketmaster 特別處理
+            is_date_clicked = press_button(target_area, By.CSS_SELECTOR, 'a')
 
-            # for: ticketmaster.sg
-            is_date_clicked = press_button(target_area, By.CSS_SELECTOR,'a')
-
-    # [PS]: current reload condition only when
+    # 自動重新載入即將開賣的頁面
     if auto_reload_coming_soon_page_enable:
         if is_coming_soon:
-            if show_debug_message:
-                print("match is_coming_soon, start to reload page.")
-
-            # case 2: match one row is coming soon.
             try:
                 driver.refresh()
             except Exception as exc:
@@ -1207,7 +1130,6 @@ def tixcraft_date_auto_select(driver, url, config_dict, domain_name):
             if not is_date_clicked:
                 if not formated_area_list is None:
                     if len(formated_area_list) == 0:
-                        print('start to refresh page.')
                         try:
                             driver.refresh()
                             time.sleep(0.3)
