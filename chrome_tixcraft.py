@@ -2083,13 +2083,44 @@ def tixcraft_auto_ocr(driver, ocr, away_from_keyboard_enable, previous_answer, C
     return is_need_redo_ocr, previous_answer, is_form_sumbited
 
 def tixcraft_ticket_main_agree(driver, config_dict):
-    is_finish_checkbox_click = False
-    for i in range(3):
-        is_finish_checkbox_click = check_checkbox(driver, By.CSS_SELECTOR, '#TicketForm_agree')
-        if is_finish_checkbox_click:
-            break
-    return is_finish_checkbox_click
+    # is_finish_checkbox_click = False
+    # for i in range(3):
+    #     is_finish_checkbox_click = check_checkbox(driver, By.CSS_SELECTOR, '#TicketForm_agree')
+    #     if is_finish_checkbox_click:
+    #         break
+    # return is_finish_checkbox_click
+    print("正在執行tixcraft_ticket_main_agree")
+    """
+    等待「同意條款」核取框可點擊，並確保已勾選。
+    :param driver: 目前的 webdriver 物件
+    :param timeout: 最長等待秒數，預設 10 秒
+    """
+    timeout=10
+    try:
+        # ① 等元素出現在 DOM
+        checkbox = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.ID, "TicketForm_agree"))
+        )
 
+        # ② 等元素真的能點（不被遮擋、已啟用）
+        WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((By.ID, "TicketForm_agree"))
+        )
+        # ③ 若尚未勾選，就點它
+        if not checkbox.is_selected():
+            try:
+                checkbox.click()  # 標準 click
+            except Exception:
+                # fallback：用 JS click（處理被覆蓋、遮擋等情形）
+                driver.execute_script("arguments[0].click();", checkbox)
+        # ④ 最後保險：若還是沒勾中，直接設 checked + 觸發 change
+        if not checkbox.is_selected():
+            driver.execute_script("""
+                arguments[0].checked = true;
+                arguments[0].dispatchEvent(new Event('change', {bubbles:true}));
+            """, checkbox)
+    except Exception as e:
+        print(f"無法自動勾選同意條款：{e}")
 def get_tixcraft_ticket_select_by_keyword(driver, config_dict, area_keyword_item):
     show_debug_message = True       # debug.
     show_debug_message = False      # online
